@@ -38,18 +38,18 @@ this.pool = mysql.createPool({
 });
 ```
 
-    - `connectionLimit` define cuántas conexiones abiertas simultáneamente puede mantener el pool.
-    - Si hay más solicitudes concurrentes que conexiones disponibles, MySQL espera hasta que una conexión se libere.
-2. **Consulta usando el pool**
+- `connectionLimit` define cuántas conexiones abiertas simultáneamente puede mantener el pool.
+- Si hay más solicitudes concurrentes que conexiones disponibles, MySQL espera hasta que una conexión se libere.
+1. **Consulta usando el pool**
 
 ```jsx
 this.pool.query(sql, values, (err, rows) => { ... });
 ```
 
-    - Node busca una conexión libre automáticamente.
-    - Ejecuta la consulta y **devuelve la conexión al pool**.
-    - Ya no necesitas abrir o cerrar la conexión manualmente.
-3. **Cierre del pool al terminar la app**
+- Node busca una conexión libre automáticamente.
+- Ejecuta la consulta y **devuelve la conexión al pool**.
+- Ya no necesitas abrir o cerrar la conexión manualmente.
+1. **Cierre del pool al terminar la app**
 
 ```jsx
 process.on('SIGINT', async () => {
@@ -57,8 +57,8 @@ process.on('SIGINT', async () => {
 });
 ```
 
-    - Esto cierra todas las conexiones abiertas del pool cuando el proceso termina (CTRL+C).
-    - Evita conexiones "colgadas" en la base de datos.
+- Esto cierra todas las conexiones abiertas del pool cuando el proceso termina (CTRL+C).
+- Evita conexiones "colgadas" en la base de datos.
 
 ---
 
@@ -106,4 +106,163 @@ process.on('SIGINT', async () => {
 💡 **Resumen guarripeich**:
 
 > El pool de conexiones es como un “grupo de trabajadores listos para actuar” en vez de contratar uno nuevo cada vez que llega un cliente. Esto ahorra tiempo y recursos, pero hay que controlar cuántos trabajadores hay para no saturar la oficina.
->
+> 
+
+---
+
+---
+
+---
+
+---
+
+# Node.js vs PHP/Laravel (Apache/PHP-FPM)
+
+Cómo funcionan, qué diferencias tienen y por qué Node.js es tan eficiente.
+
+# **1. Concurrencia: El modelo de ejecución**
+
+## **Node.js**
+
+- JavaScript corre en **un solo hilo** (event loop).
+- Las operaciones que tardan (MySQL, archivos, red…) se envían al **thread pool interno** de Node (libuv).
+- Mientras estas tareas trabajan en segundo plano, **el event loop sigue atendiendo más peticiones**.
+- No hay un hilo nuevo por petición.
+    
+    🔹 **Ventaja:** puede atender miles de conexiones simultáneas con muy poca memoria.
+    
+
+---
+
+## **PHP/Laravel (Apache o PHP-FPM)**
+
+- Cada petición HTTP se procesa en **un worker** (proceso o hilo).
+- Cada worker ejecuta PHP de principio a fin.
+- Cada petición abre y cierra su conexión a la base de datos.
+- Si hay 200 peticiones simultáneas → 200 procesos/hilos.
+
+🔹 **Ventaja:** cada petición es completamente aislada.
+
+🔹 **Desventaja:** muchas peticiones simultáneas = mucho consumo de RAM.
+
+---
+
+# **2. Asincronía: `async/await` y Promesas**
+
+## **JavaScript**
+
+- `async/await` **no crea hilos**.
+- Es simplemente “pausar esta función hasta que llegue la respuesta”.
+- **Mientras tanto**, el event loop atiende otras peticiones.
+- Internamente usa **Promesas**.
+    
+    
+
+🔹 **Conclusión:**
+
+`async/await` es solo una forma más limpia de escribir Promesas.
+
+No bloquea el hilo principal.
+
+---
+
+## **PHP**
+
+- PHP es **síncrono** por defecto.
+- Una petición no avanza hasta que termina la consulta a la base de datos.
+- Como cada petición tiene su propio worker, el bloqueo **no afecta** a las demás.
+
+---
+
+# **3. Conexiones a MySQL**
+
+## **Node.js**
+
+- Usualmente se usa un **pool de conexiones real** (mysql2, pg, etc.).
+- Varias peticiones reutilizan las mismas conexiones abiertas.
+- Muy eficiente y escalable.
+
+---
+
+## **Laravel / PHP**
+
+- **No tiene un pool real** entre peticiones.
+- Cada petición abre su propia conexión y la cierra al terminar.
+- PDO tiene modo “persistente”, pero:
+    - se mantiene **por proceso**, no entre procesos
+    - Laravel no lo gestiona como pool
+    - no es pooling real
+
+🔹 Excepción:
+
+Con **Laravel Octane (Swoole / RoadRunner)** sí puede haber conexiones persistentes.
+
+---
+
+# **4. Rendimiento y escalabilidad**
+
+| Característica | Node.js | Apache/PHP-FPM |
+| --- | --- | --- |
+| Modelo | Monohilo + event loop | Multihilo/multiproceso |
+| Conexión por petición | ❌ No | ✔️ Sí |
+| Pool de conexiones | ✔️ Sí | ❌ No (salvo casos especiales) |
+| Coste por conexión | Muy bajo | Alto |
+| Concurrencia | Excelente (miles) | Limitada por RAM |
+| Tiempo real (WS) | Muy bueno | Muy difícil |
+| Aislamiento | Bajo | Alto |
+
+# **5. ¿Por qué Node.js puede atender tantas conexiones?**
+
+Porque:
+
+- No crea hilos por cliente.
+- Solo tiene **un hilo** ejecutando JS.
+- Las tareas lentas se derivan a hilos internos del sistema.
+    
+    En Node.js:
+    
+    - El **código JavaScript** se ejecuta siempre en **un solo hilo principal** (event loop).
+    - Pero **las operaciones de I/O** (disco, red, MySQL, DNS, etc.) **no** se ejecutan en ese hilo.
+    - Esas operaciones se pasan a **un conjunto de hilos internos** administrados por **libuv** (la librería que Node usa para gestionar I/O asincrono).
+    
+    Estos hilos **no son hilos del sistema para tu código JavaScript**, pero **sí son hilos reales en segundo plano** que ejecutan operaciones bloqueantes.
+    
+- Mientras espera respuestas, **acepta otras solicitudes**.
+
+🔹 Resultado:
+
+Más usuarios con menos hardware.
+
+---
+
+# **6. ¿Cuándo usar cada uno?**
+
+## **Node.js (ideal para):**
+
+- APIs de alta concurrencia
+- Tiempo real (websockets, chat, juegos)
+- Streaming y eventos
+- Microservicios
+- IoT
+- Aplicaciones con MUCHO I/O
+
+---
+
+## **PHP/Laravel (ideal para):**
+
+- Web tradicional (HTML, Blade)
+- CMS (WordPress, Drupal)
+- Backoffice, paneles administrativos
+- Aplicaciones con carga moderada
+- Entornos donde el aislamiento por proceso es deseable
+
+---
+
+# **7. Resumen final**
+
+- Node.js es monohilo, pero puede manejar miles de clientes gracias al event loop.
+- `async/await` no crea hilos: es solo sintaxis más limpia para Promesas.
+- Node usa pools verdaderos de conexiones a DB; PHP no.
+- Apache/PHP-FPM maneja una petición por proceso/hilo.
+- Node es superior para tiempo real y alta concurrencia.
+- PHP es superior para web tradicional y CMS.
